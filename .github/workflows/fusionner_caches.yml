@@ -1,0 +1,44 @@
+name: Fusion des caches de scraping
+
+on:
+  # Manuel uniquement : c'est une opération ponctuelle de maintenance, pas
+  # un job récurrent. Tu la relances à la main quand t'as un nouveau
+  # fichier retraité à fusionner.
+  workflow_dispatch:
+    inputs:
+      original:
+        description: "Fichier cache original"
+        required: true
+        default: "pages_cache_finale.jsonl"
+      retraite:
+        description: "Fichier cache retraité à fusionner dedans"
+        required: true
+        default: "pages_cache_finale (1).jsonl"
+
+permissions:
+  contents: write
+
+jobs:
+  fusion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # aucune requête réseau, juste du JSON -> large marge suffit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fusionner les caches
+        run: python3 fusionner_caches.py "${{ inputs.original }}" "${{ inputs.retraite }}"
+
+      - name: Commit + push le résultat
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pages_cache_finale_merged.jsonl
+          git commit -m "Fusion cache : ${{ inputs.original }} + ${{ inputs.retraite }}" || echo "Rien à commit"
+          git push

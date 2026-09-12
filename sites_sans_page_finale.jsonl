@@ -75,3 +75,6 @@
 {"nom": "Agence immobilière Maya Immo - Sierentz", "site_web": "http://www.maya-immo.com/", "raison": "interdit par robots.txt"}
 {"nom": "Agence immobilière MGN IMMOBILIER Nogent-le-Roi", "site_web": "http://www.mgn-immobilier.com/", "raison": "aucune page récupérée (homepage injoignable ou aucun lien pertinent trouvé)"}
 {"nom": "Agence Immobilière Nice - ImmoVendu", "site_web": "https://www.immo-vendu.fr/", "raison": "aucune page récupérée (homepage injoignable ou aucun lien pertinent trouvé)"}
+{"nom": "Agence immobilière Pont Cardinal Immobilier - Brive La Gaillarde", "site_web": "https://www.immobilier-brive.com/", "raison": "interdit par robots.txt"}
+{"nom": "Agence immobilière Rendez Vous Demain Paris Ouest / Issy les Moulineaux Seine", "site_web": "https://rdvdemain.com/nos-biens/", "raison": "interdit par robots.txt"}
+{"nom": "Agence Immobilière Saint Germain en Laye - IDY - Immobilière Des Yvelines", "site_web": "http://www.immobiliere-des-yvelines.fr/", "raison": "exception : 'utf-8' codec can't decode byte 0xb2 in position 54: invalid start byte"}

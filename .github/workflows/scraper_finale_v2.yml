@@ -1,0 +1,67 @@
+name: Scraping prospection_finale_avec_site
+
+on:
+  # Manuel uniquement (pas de cron) : évite de tourner en même temps que les
+  # autres scrapings — même s'ils écrivent tous dans des fichiers séparés
+  # (pages_cache_finale.jsonl / progress_finale.json), ils commitent tous sur
+  # la même branche et pourraient se gêner au push.
+  # Relance simplement ce workflow à la main tant qu'il reste des agences
+  # (il reprend automatiquement via progress_finale.json).
+  workflow_dispatch:
+
+concurrency:
+  group: scraping-finale
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355  # un peu moins de 6h, marge de sécurité GitHub
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Vérifier s'il reste des agences à traiter
+        id: check
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import csv, json, os
+
+          total = 0
+          if os.path.exists("prospection_finale_avec_site.csv"):
+              with open("prospection_finale_avec_site.csv", encoding="utf-8-sig", newline="") as f:
+                  total = sum(1 for _ in csv.DictReader(f))
+
+          last_index = -1
+          if os.path.exists("progress_finale.json"):
+              with open("progress_finale.json", encoding="utf-8") as f:
+                  last_index = json.load(f).get("last_processed_index", -1)
+
+          done = last_index >= total - 1 and total > 0
+          print(f"done={'true' if done else 'false'}")
+          EOF
+
+      - name: Set up Python
+        if: steps.check.outputs.done != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances
+        if: steps.check.outputs.done != 'true'
+        run: pip install requests beautifulsoup4 lxml
+
+      - name: Configurer git
+        if: steps.check.outputs.done != 'true'
+        run: |
+          git config user.name "prospection-bot"
+          git config user.email "prospection-bot@users.noreply.github.com"
+
+      - name: Lancer le scraping
+        if: steps.check.outputs.done != 'true'
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: python3 scraper_finale_v2.py

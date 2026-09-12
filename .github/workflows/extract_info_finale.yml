@@ -1,0 +1,74 @@
+name: Extraire infos finale (GPT-OSS-120B via Cerebras)
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Nombre d'agences à traiter dans ce run"
+        default: "10000"
+      force:
+        description: "Retraiter même les agences déjà extraites"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "15 0 * * *"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dépendances
+        run: pip install requests
+
+      - name: Lancer l'extraction (finale)
+        id: run
+        env:
+          CEREBRAS_API_KEYS: ${{ secrets.CEREBRAS_API_KEYS }}
+          RUN_LIMIT: ${{ github.event.inputs.limit || '10000' }}
+          RUN_FORCE: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          FORCE_FLAG=""
+          if [ "$RUN_FORCE" = "true" ]; then
+            FORCE_FLAG="--force"
+          fi
+          python extract_info_finale.py --limit "$RUN_LIMIT" --time-budget-minutes 320 $FORCE_FLAG
+
+      - name: Commit et push les changements
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extraction_results_finale.jsonl
+          git diff --quiet --cached || git commit -m "Extraction finale GPT-OSS-120B (Cerebras) ($(date -I))"
+          git push
+
+      - name: Attendre 5 min puis relancer si travail restant (hors quota jour)
+        if: steps.run.outputs.remaining == 'true' && steps.run.outputs.daily_quota_exhausted != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_LIMIT: ${{ github.event.inputs.limit || '10000' }}
+          RUN_FORCE: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          echo "Il reste des agences à traiter, redémarrage dans 5 minutes..."
+          sleep 300
+          gh workflow run extract_info_finale.yml \
+            -f limit="$RUN_LIMIT" \
+            -f force="$RUN_FORCE"
+
+      - name: Info quota journalier atteint
+        if: steps.run.outputs.daily_quota_exhausted == 'true'
+        run: |
+          echo "📅 Quota journalier Cerebras atteint sur au moins une clé."
+          echo "Le déclenchement quotidien automatique (cron 00:15 UTC) reprendra le travail restant demain."

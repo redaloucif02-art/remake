@@ -1,0 +1,76 @@
+name: Matcher emails agences et gérants
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Nombre d'agences à traiter (0 = toutes)"
+        required: false
+        default: "0"
+      no_ai:
+        description: "Désactiver Cerebras et conserver uniquement le matching déterministe"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  match:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dépendances
+        run: pip install requests
+
+      - name: Vérifier les fichiers d'entrée
+        run: |
+          test -f agences_sans_email_agence.csv || { echo "CSV agences introuvable"; exit 1; }
+          test -f emails_trouves_finale.jsonl || { echo "emails_trouves_finale.jsonl introuvable"; exit 1; }
+
+      - name: Lancer le matching
+        env:
+          CEREBRAS_API_KEYS: ${{ secrets.CEREBRAS_API_KEYS }}
+          CEREBRAS_MODEL: gpt-oss-120b
+          LIMIT: ${{ inputs.limit || '0' }}
+          NO_AI: ${{ inputs.no_ai || 'false' }}
+        run: |
+          ARGS=(--agencies agences_sans_email_agence.csv \
+                --scraped emails_trouves_finale.jsonl \
+                --output agences_emails_matchees.jsonl \
+                --limit "$LIMIT")
+          if [ "$NO_AI" = "true" ]; then ARGS+=(--no-ai); fi
+          python match_emails_agences.py "${ARGS[@]}"
+
+      - name: Contrôler la sortie
+        run: |
+          test -s agences_emails_matchees.jsonl
+          test -f agences_ambigues.csv
+          python - <<'PY'
+          import json
+          path = "agences_emails_matchees.jsonl"
+          count = 0
+          with open(path, encoding="utf-8") as f:
+              for line in f:
+                  obj = json.loads(line)
+                  assert "Agence" in obj and "E-mail agence" in obj and "E-mail gérant" in obj
+                  count += 1
+          print(f"{count} résultat(s) JSONL valides")
+          PY
+
+      - name: Commit du résultat
+        run: |
+          git config user.name "agences-email-bot"
+          git config user.email "agences-email-bot@users.noreply.github.com"
+          git add agences_emails_matchees.jsonl agences_ambigues.csv
+          git diff --cached --quiet || git commit -m "Matching emails agences et gérants"
+          git push
